@@ -18,7 +18,7 @@ This repository contains the code for processing, segmenting, and analyzing spat
 ## Installation
 
 1. Clone this repository:
-git clone https://github.com/yuesixii/SegDecon.git cd SegDecon
+git clone https://github.com/yuesixxi/SegDecon.git cd SegDecon
 
 2. Set up the environment using Conda:
 conda env create -f environment.yml conda activate SegDecon
