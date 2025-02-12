@@ -1,0 +1,10 @@
+scanpy
+cell2location
+stardist
+tifffile
+geopandas
+matplotlib
+seaborn
+pandas
+numpy
+scvi-colab
