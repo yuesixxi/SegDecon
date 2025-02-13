@@ -1,27 +1,63 @@
 import scanpy as sc
+import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
+import warnings
 
-def postprocess_results():
-    """Post-process the deconvolution results"""
-    # Load the results from Cell2location
-    adata = sc.read_h5ad("0502newsample_c2loutput.h5ad")
-    
-    # Extract cell abundance results
-    cell_abundance = pd.DataFrame(adata.obsm['q05_cell_abundance_w_sf'])
-    
-    # Filter out low-abundance cells
-    cell_abundance = cell_abundance[cell_abundance.max(axis=1) > 0.1]
-    
-    # Add tissue location information for visualization
-    adata.obs['cell_abundance'] = cell_abundance.max(axis=1)
+# Suppress scanpy warnings
+warnings.filterwarnings("ignore")
 
-    # Visualize cell abundance across tissue locations
-    sc.pl.spatial(adata, color='cell_abundance', cmap='magma', size=1)
+def load_data(file_path):
+    """Load processed AnnData file."""
+    return sc.read_h5ad(file_path)
 
-    # Save post-processed results
-    adata.write("0502postprocessed_results.h5ad")
-    print("Post-processed results saved as '0502postprocessed_results.h5ad'.")
+def filter_abundance_data(adata, threshold=0.3):
+    """Filter cell abundance data based on a given threshold."""
+    abundance_data = adata.obsm['mean_cell_abundance_w_sf']
+    filtered_abundance_data = abundance_data.where(abundance_data > threshold, other=0)
+    return filtered_abundance_data
+
+def compute_real_cell_counts(adata, filtered_abundance_data):
+    """Compute real cell counts based on nuclei count and abundance ratio."""
+    abundance_data = adata.obsm['mean_cell_abundance_w_sf']
+    total_abundance = abundance_data.sum(axis=1).replace(0, 1e-10)  # Avoid division by zero
+    abundance_ratio = abundance_data.div(total_abundance, axis=0)
+    
+    nuclei_count = adata.obs['nuclei_count'].clip(upper=adata.obs['nuclei_count'].quantile(0.99))
+    real_cell_counts = abundance_ratio.mul(nuclei_count, axis=0)
+    return real_cell_counts
+
+def update_adata_with_real_counts(adata, real_cell_counts):
+    """Update AnnData object with real cell counts."""
+    real_cell_counts.columns = real_cell_counts.columns.str.replace(
+        r'^meanscell_abundance_w_sf_', 'real_', regex=True
+    )
+    for col in real_cell_counts.columns:
+        adata.obs[col] = real_cell_counts[col]
+    adata.obsm['real_cell_counts'] = real_cell_counts
+
+def save_processed_data(adata, output_path):
+    """Save the updated AnnData object."""
+    adata.write(output_path)
+    print(f"Processed data saved as '{output_path}'.")
+
+def run_pipeline():
+    """Run the postprocessing pipeline."""
+    print("Loading data...")
+    adata = load_data("../data/deconvolution_output.h5ad")
+    
+    print("Filtering abundance data...")
+    filtered_abundance_data = filter_abundance_data(adata)
+    
+    print("Computing real cell counts...")
+    real_cell_counts = compute_real_cell_counts(adata, filtered_abundance_data)
+    
+    print("Updating AnnData object...")
+    update_adata_with_real_counts(adata, real_cell_counts)
+    
+    print("Saving processed data...")
+    save_processed_data(adata, "../data/segdecon_output.h5ad")
+    
+    print("Postprocessing pipeline completed.")
 
 if __name__ == "__main__":
-    postprocess_results()
+    run_pipeline()
