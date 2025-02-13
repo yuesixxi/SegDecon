@@ -19,9 +19,34 @@ def setup_environment():
 
 def load_data():
     """Load the datasets"""
-    adata_st = sc.read_h5ad('./0502stardist_nuclei_c2linput.h5ad')
-    adata_ref = sc.read('../results/mouse_brain_snrna/regression_model/RegressionGeneBackgroundCoverageTorch_65covariates_40532cells_12819genes/sc.h5ad')
+    # Note: The following data is specific to the mouse brain.
+    # If working with tissues other than mouse brain, users will need to generate their own reference snRNA data.
+    
+    # Define paths
+    data_folder = './data'  # Path where data is stored (both tissue-specific and reference data)
+    reg_path = f'{data_folder}/mouse_brain_snrna/regression_model'  # Path for reference data
+    
+    # Check if the reference data exists, if not, download it
+    if not os.path.exists(reg_path):
+        os.makedirs(reg_path, exist_ok=True)  # Create necessary folders for reference data
+        print("Downloading the reference data from Cell2Location...")
+        
+        # Download the reference data (snRNA-seq data with signatures of reference cell types for mouse brain)
+        # Data is from Cell2Location, tissue is from mouse brain, and contains signatures for various cell types
+        os.system(f'cd {reg_path} && wget https://cell2location.cog.sanger.ac.uk/tutorial/mouse_brain_snrna/regression_model/RegressionGeneBackgroundCoverageTorch_65covariates_40532cells_12819genes/sc.h5ad')
+
+    # Load the reference and tissue-specific datasets
+    print("Loading the datasets...")
+    
+    # Spatial transcription data after nuclei segmentation and counting,for deconvolution (input data)
+    adata_st = sc.read_h5ad(f'{data_folder}/deconvolution_input.h5ad')
+    
+    # Reference data: snRNA-seq data with signatures of reference cell types
+    # Data is from the Cell2Location tutorial for mouse brain
+    adata_ref = sc.read(f'{reg_path}/RegressionGeneBackgroundCoverageTorch_65covariates_40532cells_12819genes/sc.h5ad')
+    
     return adata_st, adata_ref
+
 
 def preprocess_data(adata_st, adata_ref):
     """Preprocess the data"""
@@ -39,9 +64,9 @@ def preprocess_data(adata_st, adata_ref):
 def get_shared_features(adata_st, adata_ref):
     """Find and align shared features between spatial and reference data"""
     shared_features = [feature for feature in adata_st.var_names if feature in adata_ref.var_names]
-    adata_sc = adata_ref[:, shared_features].copy()
+    adata_ref = adata_ref[:, shared_features].copy()
     adata_st = adata_st[:, shared_features].copy()
-    return adata_st, adata_sc
+    return adata_st, adata_ref
 
 def prepare_for_cell2location(adata_st, adata_ref):
     """Prepare data for Cell2location"""
@@ -51,7 +76,20 @@ def prepare_for_cell2location(adata_st, adata_ref):
     inf_aver.columns = [sub(f'means_cov_effect_{covariate_col_names}_{i}', '', i) for i in adata_ref.obs[covariate_col_names].unique()]
     inf_aver = inf_aver.iloc[:, inf_aver.columns.argsort()]
     inf_aver = inf_aver * adata_ref.uns['regression_mod']['post_sample_means']['sample_scaling'].mean()
-    return inf_aver
+
+    # Calculate mean and variance for nuclei_count
+    mean_cells = adata_st.obs['nuclei_count'].mean().astype('float32')
+    var_cells = adata_st.obs['nuclei_count'].var().astype('float32')
+    
+    # Calculate N_cells_mean_var_ratio
+    N_cells_mean_var_ratio = mean_cells / var_cells
+    
+    # Find shared genes and subset both anndata and reference signatures
+    intersect = np.intersect1d(adata_st.var_names, inf_aver.index)
+    adata_st = adata_st[:, intersect].copy()
+    inf_aver = inf_aver.loc[intersect, :].copy()
+    
+    return inf_aver, mean_cells, var_cells, N_cells_mean_var_ratio, adata_st
 
 def setup_cell2location_model(adata_st, inf_aver):
     """Setup and initialize the Cell2location model"""
@@ -64,25 +102,59 @@ def setup_cell2location_model(adata_st, inf_aver):
     )
     return model
 
-def train_and_export(model):
+def train_and_export(model, adata_st):
     """Train model and export results"""
-    model.train(max_epochs=30000)
+    # Train the model
+    model.train(max_epochs=30000, batch_size=None, train_size=1)
+    
+    # Plot training history
     model.plot_history()
-    model.export_posterior()
+    plt.legend(labels=['full data training'])
+
+    # Export posterior
+    adata_st = model.export_posterior(
+        adata_st,
+        sample_kwargs={
+            "num_samples": 1000,
+            "batch_size": model.adata.n_obs,
+        },
+    )
+
+    # Plot QC
     model.plot_QC()
+    
+    return adata_st
 
 def save_results(adata_st):
     """Save results"""
-    adata_st.write("0502newsample_c2loutput.h5ad")
+    # Save the results to a .h5ad file
+    adata_st.write("../data/deconvolution_output.h5ad")
+    
+    # Save additional output as CSV
+    # pd.DataFrame(adata_st.obsm['q05_cell_abundance_w_sf']).to_csv("../data/deconvolution_output.csv")
+    
+    # Update the adata_st.obs with the abundance data
+    adata_st.obs[adata_st.uns["mod"]["factor_names"]] = adata_st.obsm["q05_cell_abundance_w_sf"]
 
 def main():
-    setup_environment()
-    adata_st, adata_ref = load_data()
-    adata_st, adata_ref = preprocess_data(adata_st, adata_ref)
-    shared_features = adata_st, adata_sc = get_shared_features(adata_st, adata_ref)
+    """Main pipeline execution"""
+    setup_environment()  # Ensure environment is set up correctly
+    adata_st, adata_ref = load_data()  # Load the data
+    adata_st, adata_ref = preprocess_data(adata_st, adata_ref)  # Preprocess the data
+
+    # Get shared features between adata_st and adata_ref
+    adata_st, adata_ref = get_shared_features(adata_st, adata_ref)
+
+    # Prepare data for Cell2location
     inf_aver = prepare_for_cell2location(adata_st, adata_ref)
+
+    # Setup the Cell2location model
     model = setup_cell2location_model(adata_st, inf_aver)
-    train_and_export(model)
+
+    # Train the model and export results
+    adata_st = train_and_export(model, adata_st)
+
+    # Save the final results
     save_results(adata_st)
 
 if __name__ == "__main__":
