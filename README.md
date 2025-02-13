@@ -4,7 +4,7 @@ This repository contains the code for processing, segmenting, and analyzing spat
 
 ## Pipeline Overview
 
-1. **Preprocessing and Segmentation** (`Denoising and segmentation.py`)
+1. **Preprocessing and Segmentation** (`denoising_and_segmentation.py`)
    - Download and preprocess tissue images.
    - Perform nuclei segmentation using Stardist.
 
