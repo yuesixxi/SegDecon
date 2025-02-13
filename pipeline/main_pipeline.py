@@ -1,6 +1,6 @@
 # main_pipeline.py
 
-from Denoising_and_segmentation import run_pipeline as preprocess_run_pipeline
+from denoising_and_segmentation import run_pipeline as preprocess_run_pipeline
 from deconvolution import run_pipeline as deconvolution_run_pipeline
 from postprocess import run_pipeline as postprocess_run_pipeline
 
