@@ -127,36 +127,31 @@ def train_and_export(model, adata_st):
 
 def save_results(adata_st):
     """Save results"""
+    # Update the adata_st.obs with the abundance data
+    adata_st.obs[adata_st.uns["mod"]["factor_names"]] = adata_st.obsm["q05_cell_abundance_w_sf"]
+
     # Save the results to a .h5ad file
     adata_st.write("../data/deconvolution_output.h5ad")
     
     # Save additional output as CSV
     # pd.DataFrame(adata_st.obsm['q05_cell_abundance_w_sf']).to_csv("../data/deconvolution_output.csv")
     
-    # Update the adata_st.obs with the abundance data
-    adata_st.obs[adata_st.uns["mod"]["factor_names"]] = adata_st.obsm["q05_cell_abundance_w_sf"]
+def run_deconvolution_pipeline():
+    """Run the deconvolution pipeline"""
+    print("Loading data...")
+    adata_st, adata_ref = load_data()
 
-def main():
-    """Main pipeline execution"""
-    setup_environment()  # Ensure environment is set up correctly
-    adata_st, adata_ref = load_data()  # Load the data
-    adata_st, adata_ref = preprocess_data(adata_st, adata_ref)  # Preprocess the data
+    print("Preprocessing data...")
+    adata_st, inf_aver, mean_cells, var_cells = preprocess_data(adata_st, adata_ref)
 
-    # Get shared features between adata_st and adata_ref
-    adata_st, adata_ref = get_shared_features(adata_st, adata_ref)
+    print("Setting up Cell2Location model...")
+    model = setup_cell2location_model(adata_st, inf_aver, mean_cells, var_cells)
 
-    # Prepare data for Cell2location
-    inf_aver = prepare_for_cell2location(adata_st, adata_ref)
-
-    # Setup the Cell2location model
-    model = setup_cell2location_model(adata_st, inf_aver)
-
-    # Train the model and export results
+    print("Training model and exporting results...")
     adata_st = train_and_export(model, adata_st)
 
-    # Save the final results
+    print("Saving results...")
     save_results(adata_st)
 
 if __name__ == "__main__":
-    main()
-
+    run_deconvolution_pipeline()
