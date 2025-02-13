@@ -1,20 +1,28 @@
-# Ignore Python bytecode
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 
-# Ignore environment files
-.env
+# Virtual environments
+venv/
+.env/
+*.venv
 *.env
 
-# Ignore data files
-data/
-
-# Ignore logs
-*.log
-
-# Ignore Jupyter Notebook checkpoints
+# Jupyter notebooks
 .ipynb_checkpoints/
 
-# Ignore IDE-specific files
-.vscode/
-.idea/
+# Logs and temp files
+logs/
+*.log
+.DS_Store
+
+# Anndata files
+*.h5ad
+*.csv
+*.tsv
+*.txt
+
+# Config files
+.envrc
