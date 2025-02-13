@@ -1,18 +1,25 @@
-name: spatial-transcriptomics
+name: spatial_transcriptomics
 channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.8
+  - python=3.9
+  - numpy
+  - pandas
   - scanpy
-  - cell2location
-  - stardist
-  - tifffile
-  - geopandas
+  - anndata
   - matplotlib
   - seaborn
-  - pandas
-  - numpy
-  - scvi-colab
+  - opencv
+  - scikit-image
+  - scikit-learn
+  - tensorflow
+  - pytorch
+  - torchvision
+  - cudatoolkit
+  - tqdm
+  - pip
   - pip:
-    - scvi
+      - cell2location
+      - stardist
+      - tifffile
