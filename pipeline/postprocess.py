@@ -55,7 +55,7 @@ def run_pipeline():
     update_adata_with_real_counts(adata, real_cell_counts)
     
     print("Saving processed data...")
-    save_processed_data(adata, "../data/segdecon_output.h5ad")
+    save_processed_data(adata, "../data/segdecon_results.h5ad")
     
     print("Postprocessing pipeline completed.")
 
