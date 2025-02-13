@@ -202,8 +202,8 @@ def run_pipeline():
     adata, df_tissue_positions = process_spatial_data()
 
     # Save results
-    adata.write('../data/0502stardist_nuclei_c2linput.h5ad')
-    print(f"Processed data saved as '0502stardist_nuclei_c2linput.h5ad'.")
+    adata.write('../data/deconvolution_input.h5ad')
+    print(f"Processed data saved as 'deconvolution_input.h5ad'.")
 
 if __name__ == "__main__":
     run_pipeline()
