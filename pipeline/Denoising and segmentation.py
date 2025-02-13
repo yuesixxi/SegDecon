@@ -71,6 +71,13 @@ def preprocess_image():
     suggested_lower, suggested_upper = get_kmeans_noise_thresholds(img_hsv, crop_region=(17500, 22500, 7000, 12000))
     print(f"Suggested Lower HSV: {suggested_lower}, Suggested Upper HSV: {suggested_upper}")
 
+    # **Optiona2**: Manually setting, not used by default
+    #for precise noise removal, a hybrid approach is recommended, where the manually selected thresholds 
+    #are refined by taking the union of hue values from at least ten representative noise pixels. 
+    #This combined strategy ensures more accurate and dataset-specific noise suppression while maintaining robust 
+    #segmentation performance.
+
+
     # Noise removal
     mask = cv2.inRange(img_hsv, lower_noise, upper_noise)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15)) 
@@ -120,6 +127,8 @@ def filter_cells(gdf):
 
 def process_spatial_data():
     """Read and process spatial transcriptomics data"""
+    
+    # Load gene expression data
     adata = sc.read_10x_h5('../data/CytAssist_Fresh_Frozen_Sagittal_Mouse_Brain_filtered_feature_bc_matrix.h5')
 
     # QC calculations
@@ -128,29 +137,74 @@ def process_spatial_data():
     sc.pp.calculate_qc_metrics(adata, qc_vars=["mt"], inplace=True)
 
     # Load spatial coordinates
-    df_tissue_positions = pd.read_csv('../data/spatial/spatial/tissue_positions.csv', index_col='barcode')
+    spatial_path = '../data/spatial/spatial/'
+    df_tissue_positions = pd.read_csv(spatial_path + 'tissue_positions.csv', index_col='barcode')
+    
+    # Merge coordinates into adata.obs
     adata.obs = adata.obs.merge(df_tissue_positions, left_index=True, right_index=True, how='left')
     assert adata.obs.shape[0] == adata.n_obs, "Number of rows in adata.obs doesn't match expected."
+
+    # Create a GeoDataFrame for spatial visualization (optional)
+    geometry = [Point(xy) for xy in zip(df_tissue_positions['pxl_col_in_fullres'], df_tissue_positions['pxl_row_in_fullres'])]
+    gdf_coordinates = gpd.GeoDataFrame(df_tissue_positions, geometry=geometry)
+
+    # Filter tissue_positions to match the index of adata.obs
+    df_tissue_positions = df_tissue_positions.loc[adata.obs.index]
 
     # Store spatial coordinates in obsm
     spatial_coords = np.array([df_tissue_positions['pxl_col_in_fullres'], df_tissue_positions['pxl_row_in_fullres']]).T
     adata.obsm['spatial'] = spatial_coords
-    return adata, df_tissue_positions
+
+    # Load scale factors
+    scalefactors_file = spatial_path + 'scalefactors_json.json'
+    with open(scalefactors_file, 'r') as f:
+        scalefactors = json.load(f)
+
+    # Load tissue images
+    hires_image_file = spatial_path + 'tissue_hires_image.png'
+    lowres_image_file = spatial_path + 'tissue_lowres_image.png'
+
+    img_hires = np.array(Image.open(hires_image_file))
+    img_lowres = np.array(Image.open(lowres_image_file))
+
+    # Store images and scalefactors in adata.uns
+    adata.uns['spatial'] = {
+        'CytAssist_Fresh_Frozen_Sagittal_Mouse_Brain': {
+            'images': {
+                'hires': img_hires,
+                'lowres': img_lowres
+            },
+            'scalefactors': scalefactors
+        }
+    }
+
+    return adata, gdf_coordinates
+
 
 def run_pipeline():
-    """Run the entire pipeline"""
+    """Run the preprocessing and segmentation pipeline"""
+    # Download and extract data (if needed)
     download_and_extract_data()
+    
+    # Image preprocessing
     modified_img = preprocess_image()
+    
+    # Nuclei segmentation
     polys = segment_nuclei(modified_img)
+    
+    # Create geodataframe from polygons
     gdf = create_geodataframe(polys)
+    
+    # Filter cells
     gdf_filtered = filter_cells(gdf)
 
     # Process spatial transcriptomics data
     adata, df_tissue_positions = process_spatial_data()
 
     # Save results
-    adata.write('0502stardist_nuclei_c2linput.h5ad')
+    adata.write('../data/0502stardist_nuclei_c2linput.h5ad')
     print(f"Processed data saved as '0502stardist_nuclei_c2linput.h5ad'.")
 
 if __name__ == "__main__":
     run_pipeline()
+
