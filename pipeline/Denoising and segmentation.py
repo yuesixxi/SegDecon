@@ -13,6 +13,7 @@ from csbdeep.utils import normalize
 from stardist.models import StarDist2D
 from shapely.geometry import Polygon
 from tifffile import imread
+from .kmeans_noise_filter import get_default_noise_thresholds, get_kmeans_noise_thresholds  
 
 def download_and_extract_data():
     """Download and extract all required data into the data/ directory"""
@@ -44,29 +45,62 @@ def download_and_extract_data():
 
     print(f"Extraction completed, files extracted to: {extract_path}")
 
+import os
+import numpy as np
+import cv2
+from skimage.io import imread
+from .kmeans_noise_filter import get_default_noise_thresholds, get_kmeans_noise_thresholds  # 关键导入
+
 def preprocess_image():
     """Image preprocessing: noise reduction and HSV conversion"""
-    print("Loading image...")
-    img_he = imread('./CytAssist_Fresh_Frozen_Sagittal_Mouse_Brain_tissue_image.tif', plugin='tifffile')
-    img_hsv = cv2.cvtColor(img_he, cv2.COLOR_RGB2HSV)
 
-    # Noise removal and image adjustment
-    lower_noise = np.array([319 / 2, 54 * 2.55, 55 * 2.55]) 
-    upper_noise = np.array([325 / 2, 81 * 2.55, 83 * 2.55])
+    # Get the image path
+    img_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "CytAssist_Fresh_Frozen_Sagittal_Mouse_Brain_tissue_image.tif")
+
+    print(f"Loading image from {img_path}...")
+    img = imread(img_path, plugin='tifffile')
+
+    # Convert to HSV
+    img_hsv = cv2.cvtColor(img, cv2.COLOR_RGB2HSV)
+
+    # Use the default noise threshold
+    lower_noise, upper_noise = get_default_noise_thresholds()
+
+    # **Optional**: Provide KMeans reference, not used by default
+    print("Suggested noise thresholds from KMeans (not used by default):")
+    suggested_lower, suggested_upper = get_kmeans_noise_thresholds(img_hsv, crop_region=(17500, 22500, 7000, 12000))
+    print(f"Suggested Lower HSV: {suggested_lower}, Suggested Upper HSV: {suggested_upper}")
+
+    # Noise removal
     mask = cv2.inRange(img_hsv, lower_noise, upper_noise)
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15)) 
     connected_mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
     replacement_color = np.array([321 / 2, 45 * 2.55, 98 * 2.55], dtype=np.uint8).reshape(1, 1, 3)
     img_hsv[connected_mask > 0] = replacement_color
     modified_img = cv2.cvtColor(img_hsv, cv2.COLOR_HSV2RGB)
+
     return modified_img
 
 def segment_nuclei(modified_img):
     """Nuclei segmentation using Stardist model"""
     model = StarDist2D.from_pretrained('2D_versatile_he')
     img = normalize(modified_img, 5, 95)
-    labels, polys = model.predict_instances_big(img, axes='YXC', block_size=4096, prob_thresh=0.2, nms_thresh=0.001)
+
+    # Adjust nms_thresh and prob_thresh 
+    labels, polys = model.predict_instances_big(
+        img, 
+        axes='YXC', 
+        block_size=4096, 
+        prob_thresh=0.2, 
+        nms_thresh=0.001,
+        min_overlap=128,  
+        context=128,       
+        normalizer=None, 
+        n_tiles=(4,4,1)    
+    )
+
     return polys
+
 
 def create_geodataframe(polys):
     """Create GeoDataFrame from segmented polygons"""
@@ -81,11 +115,12 @@ def create_geodataframe(polys):
 
 def filter_cells(gdf):
     """Filter nuclei with area greater than 35 and less than 1500"""
+    # Adjust this range manually according to specific data.
     return gdf[(gdf['area'] > 35) & (gdf['area'] < 1500)]
 
 def process_spatial_data():
     """Read and process spatial transcriptomics data"""
-    adata = sc.read_10x_h5('./CytAssist_Fresh_Frozen_Sagittal_Mouse_Brain_filtered_feature_bc_matrix.h5')
+    adata = sc.read_10x_h5('../data/CytAssist_Fresh_Frozen_Sagittal_Mouse_Brain_filtered_feature_bc_matrix.h5')
 
     # QC calculations
     adata.var_names_make_unique()
@@ -93,7 +128,7 @@ def process_spatial_data():
     sc.pp.calculate_qc_metrics(adata, qc_vars=["mt"], inplace=True)
 
     # Load spatial coordinates
-    df_tissue_positions = pd.read_csv('./spatial/spatial/tissue_positions.csv', index_col='barcode')
+    df_tissue_positions = pd.read_csv('../data/spatial/spatial/tissue_positions.csv', index_col='barcode')
     adata.obs = adata.obs.merge(df_tissue_positions, left_index=True, right_index=True, how='left')
     assert adata.obs.shape[0] == adata.n_obs, "Number of rows in adata.obs doesn't match expected."
 
