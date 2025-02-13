@@ -15,14 +15,33 @@ from shapely.geometry import Polygon
 from tifffile import imread
 
 def download_and_extract_data():
-    """Download and extract data"""
-    print("Downloading tissue image...")
-    os.system('curl -O https://cf.10xgenomics.com/samples/spatial-exp/2.1.0/CytAssist_Fresh_Frozen_Sagittal_Mouse_Brain/CytAssist_Fresh_Frozen_Sagittal_Mouse_Brain_tissue_image.tif')
+    """Download and extract all required data into the data/ directory"""
+    
+    # Define paths
+    data_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")  # data/ directory
+    extract_path = os.path.join(data_path, "spatial")  # Extracted spatial data path
+    tar_path = os.path.join(data_path, "CytAssist_Fresh_Frozen_Sagittal_Mouse_Brain_spatial.tar.gz")
 
-    tar_path = "CytAssist_Fresh_Frozen_Sagittal_Mouse_Brain_spatial.tar.gz"
-    extract_path = "./spatial"  
+    # Create necessary directories
+    os.makedirs(data_path, exist_ok=True)
+    os.makedirs(extract_path, exist_ok=True)
+
+    # Download required files directly into the data/ directory
+    print("Downloading files into the data/ directory...")
+    os.system(f'curl -o {data_path}/CytAssist_Fresh_Frozen_Sagittal_Mouse_Brain_tissue_image.tif '
+              'https://cf.10xgenomics.com/samples/spatial-exp/2.1.0/CytAssist_Fresh_Frozen_Sagittal_Mouse_Brain/CytAssist_Fresh_Frozen_Sagittal_Mouse_Brain_tissue_image.tif')
+
+    os.system(f'curl -o {tar_path} '
+              'https://cf.10xgenomics.com/samples/spatial-exp/2.1.0/CytAssist_Fresh_Frozen_Sagittal_Mouse_Brain/CytAssist_Fresh_Frozen_Sagittal_Mouse_Brain_spatial.tar.gz')
+
+    os.system(f'curl -o {data_path}/CytAssist_Fresh_Frozen_Sagittal_Mouse_Brain_filtered_feature_bc_matrix.h5 '
+              'https://cf.10xgenomics.com/samples/spatial-exp/2.1.0/CytAssist_Fresh_Frozen_Sagittal_Mouse_Brain/CytAssist_Fresh_Frozen_Sagittal_Mouse_Brain_filtered_feature_bc_matrix.h5')
+
+    # Extract tar.gz file into data/spatial/
+    print(f"Extracting {tar_path} to {extract_path} ...")
     with tarfile.open(tar_path, "r:gz") as tar:
         tar.extractall(path=extract_path)
+
     print(f"Extraction completed, files extracted to: {extract_path}")
 
 def preprocess_image():
