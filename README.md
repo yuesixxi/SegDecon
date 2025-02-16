@@ -28,7 +28,7 @@ conda env create -f environment.yml conda activate SegDecon
 Execute the pipeline by running the following script:
 SegDecon/Pipeline/Denoising and segmentation.py 
 SegDecon/Pipeline/deconvolution.py 
-SefDecon/Pipeline/postprocess.py
+SegDecon/Pipeline/postprocess.py
 
 
 ## Results
