@@ -31,7 +31,8 @@ To accommodate diverse datasets, SegDecon provides a KMeans-based method for dyn
 - **KMeans-based method**: `kmeans_noise_filter.py`
 
 The comparison of segmentation effects after segdecon denoising is as follows：  
-![Segmentationeffect](images/denoisingeffect)  
+![Segmentationeffect](images/predict)  VS.
+![Segmentationeffect](images/con_predict)
 
 
 2. **Deconvolution** (`deconvolution.py`)
